@@ -3,7 +3,7 @@
 [![Travis CI](https://travis-ci.org/knutin/elli.png)](https://travis-ci.org/knutin/elli)
 
 Modifications by flodihn:
-* Removed try catch when calling Mod:handle in elli_http.erl so errors in your code crashes normllay without hiding the error and returning an html status code 500.
+* Removed try catch when calling Mod:handle in elli_http.erl so errors in your code crashes normaly without hiding the error and returning an html status code 500.
 
 Elli is a webserver you can run inside your Erlang application to
 expose an HTTP API. Elli is a aimed exclusively at building
