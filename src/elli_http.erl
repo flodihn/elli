@@ -30,9 +30,10 @@ start_link(Server, ListenSocket, Options, Callback) ->
 %% transfer. If accept doesn't give us a socket within a configurable
 %% timeout, we loop to allow code upgrades of this module.
 accept(Server, ListenSocket, Options, Callback) ->
-    case catch elli_tcp:accept(ListenSocket, Server, accept_timeout(Options)) of
+    case catch elli_tcp:accept(ListenSocket, accept_timeout(Options)) of
         {ok, Socket} ->
             t(accepted),
+            gen_server:cast(Server, accepted),
             ?MODULE:keepalive_loop(Socket, Options, Callback);
         {error, timeout} ->
             ?MODULE:accept(Server, ListenSocket, Options, Callback);
@@ -209,31 +210,43 @@ send_bad_request(Socket) ->
 %% @doc: Executes the user callback, translating failure into a proper
 %% response.
 execute_callback(#req{callback = {Mod, Args}} = Req) ->
-    case Mod:handle(Req, Args) of
-        {ok, Headers, {file, Filename}} ->
-            {file, 200, Headers, Filename, {0, 0}};
-        {ok, Headers, {file, Filename, Range}} ->
-            {file, 200, Headers, Filename, Range};
-        {ok, Headers, Body} -> 
-            {response, 200, Headers, Body};
-        {ok, Body} -> 
-            {response, 200, [], Body};
-        {chunk, Headers} -> 
-            {chunk, Headers, <<"">>};
-        {chunk, Headers, Initial} ->
-            {chunk, Headers, Initial};
+    try Mod:handle(Req, Args) of
+        {ok, Headers, {file, Filename}}       -> {file, 200, Headers, Filename, {0, 0}};
+        {ok, Headers, {file, Filename, Range}}-> {file, 200, Headers, Filename, Range};
+        {ok, Headers, Body}                   -> {response, 200, Headers, Body};
+        {ok, Body}                            -> {response, 200, [], Body};
+        {chunk, Headers}                      -> {chunk, Headers, <<"">>};
+        {chunk, Headers, Initial}             -> {chunk, Headers, Initial};
         {HttpCode, Headers, {file, Filename}} ->
             {file, HttpCode, Headers, Filename, {0, 0}};
         {HttpCode, Headers, {file, Filename, Range}} ->
             {file, HttpCode, Headers, Filename, Range};
-        {HttpCode, Headers, Body} ->
-            {response, HttpCode, Headers, Body};
-        {HttpCode, Body} ->
-            {response, HttpCode, [], Body};
+        {HttpCode, Headers, Body}             -> {response, HttpCode, Headers, Body};
+        {HttpCode, Body}                      -> {response, HttpCode, [], Body};
         Unexpected                            ->
             handle_event(Mod, invalid_return, [Req, Unexpected], Args),
             {response, 500, [], <<"Internal server error">>}
+    catch
+        throw:{ResponseCode, Headers, Body} when is_integer(ResponseCode) ->
+            {response, ResponseCode, Headers, Body};
+        throw:Exc ->
+            handle_event(Mod, request_throw,
+                         [Req, Exc, erlang:get_stacktrace()], Args),
+            {response, 500, [], <<"Internal server error">>};
+        error:Error ->
+            error_logger:error_report({Mod, error, Error,
+                                       erlang:get_stacktrace()}),
+            handle_event(Mod, request_error,
+                         [Req, Error, erlang:get_stacktrace()], Args),
+            {response, 500, [], <<"Internal server error">>};
+        exit:Exit ->
+            error_logger:error_report({Mod, exit, Exit,
+                                       erlang:get_stacktrace()}),
+            handle_event(Mod, request_exit, 
+                         [Req, Exit, erlang:get_stacktrace()], Args),
+            {response, 500, [], <<"Internal server error">>}
     end.
+
 %%
 %% CHUNKED-TRANSFER
 %%
@@ -551,13 +564,13 @@ split_path(Path) ->
 %% cowboy_http:x_www_form_urlencoded/2
 -spec split_args(binary()) -> list({binary(), binary() | true}).
 split_args(<<>>) ->
-    [];
+	[];
 split_args(Qs) ->
-    Tokens = binary:split(Qs, <<"&">>, [global, trim]),
-    [case binary:split(Token, <<"=">>) of
-        [Token] -> {Token, true};
-        [Name, Value] -> {Name, Value}
-    end || Token <- Tokens].
+	Tokens = binary:split(Qs, <<"&">>, [global, trim]),
+	[case binary:split(Token, <<"=">>) of
+		[Token] -> {Token, true};
+		[Name, Value] -> {Name, Value}
+	end || Token <- Tokens].
 
 
 %%
