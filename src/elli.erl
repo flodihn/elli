@@ -91,11 +91,11 @@ init([Opts]) ->
                                   {certfile, CertFile}];
                          false -> [] end,
 
-    AcceptTimeout  = proplists:get_value(accept_timeout, Opts, 10000),
+    AcceptTimeout  = proplists:get_value(accept_timeout, Opts, 60000),
     RequestTimeout = proplists:get_value(request_timeout, Opts, 60000),
-    HeaderTimeout  = proplists:get_value(header_timeout, Opts, 10000),
-    BodyTimeout    = proplists:get_value(body_timeout, Opts, 30000),
-    MaxBodySize    = proplists:get_value(max_body_size, Opts, 1024000),
+    HeaderTimeout  = proplists:get_value(header_timeout, Opts, 60000),
+    BodyTimeout    = proplists:get_value(body_timeout, Opts, 60000),
+    MaxBodySize    = proplists:get_value(max_body_size, Opts, 102400000),
 
     Options = [{accept_timeout, AcceptTimeout},
                {request_timeout, RequestTimeout},
