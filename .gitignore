@@ -3,6 +3,7 @@ deps/**
 ebin/**
 *.beam
 .eunit
+Mnesia*
 *~
 #*
 .dialyzer.plt
